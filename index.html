@@ -1660,7 +1660,9 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     handled:0,
     railOpen:false,
     railCollapsed:false,
-    visionThreshold:0.7
+    visionThreshold:0.7,
+    askScope:'ALL',
+    askHistory:[]
   };
 
   /* =========================================================
@@ -2801,15 +2803,18 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
   }
   function askModal(scopeId){
     closeDrawer();
-    var id=scopeId||'ALL';
+    var id=scopeId!=null? scopeId : (state.askScope||'ALL');
+    state.askScope=id;
     var a=id==='ALL'? null : AGENTS.filter(function(x){return x.id===id;})[0];
     var askChips=['status','actions','escalation','kpis','monitors','boundary'];
     var options='<option value="ALL"'+(id==='ALL'?' selected':'')+'>All agents</option>'+AGENTS.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===id?' selected':'')+'>'+esc(x.id)+' · '+esc(x.name)+'</option>';}).join('');
+    var histHtml=state.askHistory.length? ('<label class="asklabel">Recent questions</label><div class="od-cluster mb-3">'+state.askHistory.map(function(hq){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+esc(hq)+'">'+esc(hq.length>28?hq.slice(0,28)+'…':hq)+'</button>';}).join('')+'</div>') : '';
     var html='<div class="mh"><h3>Ask AI'+(a?(' — '+esc(a.name)+' ('+esc(id)+')'):' — All agents')+'</h3></div>'+
       '<div class="mb">'+
         '<label class="asklabel" for="askScope">Ask about</label>'+
         '<select id="askScope" class="txtinput mb-3">'+options+'</select>'+
         '<div class="od-cluster mb-3">'+askChips.map(function(k){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+'</button>';}).join('')+'</div>'+
+        histHtml+
         '<label class="asklabel" for="askInput-'+esc(id)+'">Ask a question</label>'+
         '<div class="od-row"><input type="text" id="askInput-'+esc(id)+'" class="txtinput od-fill" placeholder="e.g. what is your status?" aria-describedby="askHint-'+esc(id)+'">'+
         '<button class="btn primary sm" data-act="ask-agent" data-id="'+esc(id)+'">Ask</button></div>'+
@@ -2818,6 +2823,13 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
       '</div>'+
       '<div class="mf"><button class="btn ghost" data-close="modal">Close</button></div>';
     openModal(html);
+  }
+  function pushAskHistory(q){
+    q=(q||'').trim();
+    if(!q) return;
+    if(state.askHistory[0]===q) return;
+    state.askHistory.unshift(q);
+    if(state.askHistory.length>5) state.askHistory.length=5;
   }
   function agentDrawer(id){
     closeModal();
@@ -2923,7 +2935,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
       if(act==='ask-agent'){
         var aid=el.getAttribute('data-id');
         var qv=el.getAttribute('data-q');
-        if(qv==null){ var inp=document.getElementById('askInput-'+aid); qv=inp? inp.value : ''; }
+        if(qv==null){ var inp=document.getElementById('askInput-'+aid); qv=inp? inp.value : ''; pushAskHistory(qv); }
         var ansEl=document.getElementById('askAnswer-'+aid);
         if(ansEl){
           ansEl.textContent='Thinking…'; ansEl.hidden=false;
@@ -3015,6 +3027,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     var ansEl=document.getElementById('askAnswer-'+aid);
     if(ansEl){
       var q=t.value;
+      pushAskHistory(q);
       ansEl.textContent='Thinking…'; ansEl.hidden=false;
       setTimeout(function(){ ansEl.textContent=(aid==='ALL'? askAgentAll(q) : askAgent(aid,q)); },500);
     }
@@ -3086,6 +3099,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
   if(VIEWS[start]) state.view=start;
   applyLangAttrs();
   render();
+  setTimeout(function(){ toast('Tip: press / anywhere to ask AI.',''); },900);
 })();
 </script>
 </body>
