@@ -217,6 +217,20 @@ a{ color:inherit; }
 .content{ padding:var(--s6); overflow-y:auto; min-height:0; flex:1 1 auto; }
 .wrap{ max-width:1480px; margin:0 auto; }
 
+/* ---------- proactive AI pulse ---------- */
+@keyframes appulse{ 0%{ box-shadow:0 0 0 0 rgba(95,194,186,.55); } 70%{ box-shadow:0 0 0 7px rgba(95,194,186,0); } 100%{ box-shadow:0 0 0 0 rgba(95,194,186,0); } }
+.aipulse{
+  display:flex; align-items:center; gap:var(--s3); padding:var(--s3) var(--s4); margin-bottom:var(--s4);
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--r-lg); box-shadow:var(--sh-1);
+}
+.aipulse .ap-dot{ width:8px; height:8px; border-radius:50%; background:var(--brand-teal); flex:none; animation:appulse 2.4s infinite; }
+.aipulse .nicon{ flex:none; color:var(--brand-teal); }
+.aipulse .ap-body{ flex:1 1 auto; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.aipulse .ap-tag{ font-size:var(--fs-xs); font-weight:700; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-2); }
+.aipulse .ap-text{ font-size:var(--fs-sm); color:var(--ink); }
+.aipulse .ap-text b{ font-weight:600; }
+.aipulse .btn{ flex:none; }
+
 /* ---------- banners ---------- */
 .banner{ display:flex; align-items:flex-start; gap:var(--s3); padding:var(--s3) var(--s4); border-radius:var(--r); margin-bottom:var(--s4); border:1px solid; font-size:var(--fs-md); line-height:1.55; }
 .banner svg{ width:20px; height:20px; flex:none; margin-top:1px; }
@@ -519,6 +533,8 @@ input[type=range]:focus-visible{ outline:2px solid var(--teal-600); outline-offs
   .topbar{ padding:var(--s2) var(--s4); gap:var(--s3); }
   .topbar h1{ font-size:var(--fs-base); }
   .topmark .tm-w{ display:none; }
+  .aipulse{ flex-wrap:wrap; }
+  .aipulse .ap-body{ flex-basis:100%; }
 }
 @media (max-width:640px){
   .topbar{ flex-wrap:wrap; row-gap:var(--s2); }
@@ -561,7 +577,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
   *,*::before,*::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
 }
 @media print{
-  .rail, .topbar, .railScrim, #scrim, #modalRoot, #toasts, .drawer, .no-print, button{ display:none !important; }
+  .rail, .topbar, .railScrim, #scrim, #modalRoot, #toasts, .drawer, .no-print, .aipulse, button{ display:none !important; }
   html, body{ background:#fff; height:auto; }
   .app{ display:block; height:auto; }
   .content{ padding:0; overflow:visible; height:auto; }
@@ -633,7 +649,10 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
       </div>
     </header>
     <main class="content" id="main" tabindex="-1">
-      <div class="wrap" id="view"></div>
+      <div class="wrap">
+        <div class="aipulse" id="aiPulse"></div>
+        <div id="view"></div>
+      </div>
     </main>
   </div>
 </div>
@@ -2604,6 +2623,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     document.getElementById('viewTitle').textContent=L(meta.title);
     document.getElementById('viewCrumb').textContent=L(meta.crumb);
     document.getElementById('view').innerHTML=(VIEWS[state.view]||viewBrief)();
+    document.getElementById('aiPulse').innerHTML=renderPulse();
     document.getElementById('freshPill').className='pill live'+(state.degraded?' ':'');
     document.getElementById('freshText').textContent=freshLabel(state.degraded?null:42);
     document.getElementById('estopBtn').className='btn '+(state.emergencyStop?'amber':'danger')+' sm';
@@ -2696,6 +2716,39 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
   }
 
   var AGENT_VIEW = {A0:'orchestrator', A1:'brief', A2:'branch', A3:'lab', A4:'home', A5:'cx', A6:'mkt', A12:'health', S1:'health', S2:'actions', S3:'vision'};
+  var VIEW_AGENTS = {};
+  Object.keys(AGENT_VIEW).forEach(function(a){ var v=AGENT_VIEW[a]; (VIEW_AGENTS[v]=VIEW_AGENTS[v]||[]).push(a); });
+  function pulseAgentName(id){ var a=AGENTS.filter(function(x){return x.id===id;})[0]; return a? a.name : id; }
+  function renderPulse(){
+    var agents = VIEW_AGENTS[state.view] || ['A0'];
+    var matchAll = (state.view==='orchestrator' || state.view==='actions');
+    var decs = state.decisions.filter(function(d){ return d.status==='open' && (matchAll || agents.indexOf(d.agent)>-1); });
+    var sevW={crit:0,warning:1,info:2};
+    decs.sort(function(a,b){ return (sevW[a.sev]==null?3:sevW[a.sev])-(sevW[b.sev]==null?3:sevW[b.sev]); });
+    if(decs.length){
+      var d=decs[0];
+      return '<span class="ap-dot" aria-hidden="true"></span>'+ic('spark')+
+        '<div class="ap-body"><div class="ap-tag">Proactive · '+esc(pulseAgentName(d.agent))+' ('+esc(d.agent)+')</div>'+
+        '<div class="ap-text">'+sevTag(d.sev)+' <b>Recommends:</b> '+esc(d.rec)+'</div></div>'+
+        '<button class="btn ghost xs" data-nav="orchestrator">Review</button>';
+    }
+    var tix = state.tickets.filter(function(t){ return t.slaState!=='closed' && (matchAll || agents.some(function(a){ return t.src.indexOf(a+' ')===0; })); });
+    tix.sort(function(a,b){ return (a.dueMin==null?9e9:a.dueMin)-(b.dueMin==null?9e9:b.dueMin); });
+    if(tix.length){
+      var t=tix[0];
+      return '<span class="ap-dot" aria-hidden="true"></span>'+ic('spark')+
+        '<div class="ap-body"><div class="ap-tag">Proactive · '+esc(t.src)+'</div>'+
+        '<div class="ap-text">'+sevTag(t.sev)+' <b>Flagged:</b> '+esc(t.title)+'</div></div>'+
+        '<button class="btn ghost xs" data-nav="actions">Review</button>';
+    }
+    var id=agents[0];
+    var det=AGENT_DETAIL[id];
+    var mission = det? det.mission : 'Monitoring cross-enterprise signals for anomalies.';
+    return '<span class="ap-dot" aria-hidden="true"></span>'+ic('spark')+
+      '<div class="ap-body"><div class="ap-tag">Proactive · '+esc(pulseAgentName(id))+' ('+esc(id)+')</div>'+
+      '<div class="ap-text">No open items right now — '+esc(mission)+'</div></div>'+
+      '<button class="btn ghost xs" data-agent="'+esc(id)+'">Agent detail</button>';
+  }
   function agentDrawer(id){
     var a=AGENTS.filter(function(x){return x.id===id;})[0]; var d=AGENT_DETAIL[id];
     if(!a||!d) return;
