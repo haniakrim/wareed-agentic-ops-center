@@ -233,7 +233,7 @@ a{ color:inherit; }
 
 /* ---------- ask-agent panel ---------- */
 .asklabel{ display:block; font-size:var(--fs-xs); font-weight:600; color:var(--ink-2); margin-bottom:var(--s1); }
-.txtinput{ min-height:40px; padding:0 var(--s3); border:1px solid var(--line-strong); border-radius:var(--r-sm); font-size:var(--fs-sm); color:var(--ink); background:var(--surface); }
+.txtinput{ width:100%; min-height:40px; padding:0 var(--s3); border:1px solid var(--line-strong); border-radius:var(--r-sm); font-size:var(--fs-sm); color:var(--ink); background:var(--surface); }
 .txtinput:focus-visible{ outline:2px solid var(--brand-teal); outline-offset:1px; border-color:var(--brand-teal); }
 
 /* ---------- banners ---------- */
@@ -647,7 +647,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3a9 9 0 100 18 9 9 0 000-18z"/><path d="M9 9h6v6H9z"/></svg>
           <span class="lbl">Emergency stop</span>
         </button>
-        <button class="iconbtn" id="searchBtn" aria-label="Ask AI" title="Ask AI">
+        <button class="iconbtn" id="searchBtn" aria-label="Ask AI (press slash)" title="Ask AI (press /)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg>
         </button>
         <div class="avatar" title="CEO office">CEO</div>
@@ -2773,20 +2773,48 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     if(/reason|why|how/.test(q)) return 'How I reason: '+det.reasons.join('; ')+'.';
     return det.mission;
   }
-  function askModal(){
+  function askAgentAll(q){
+    q=(q||'').toLowerCase().trim();
+    if(!q) return 'Type a question, or use a quick prompt above.';
+    if(/status|doing|today|now/.test(q)){
+      var openD=state.decisions.filter(function(x){return x.status==='open';});
+      var sevW={crit:0,warning:1,info:2};
+      openD.sort(function(a,b){ return (sevW[a.sev]==null?3:sevW[a.sev])-(sevW[b.sev]==null?3:sevW[b.sev]); });
+      if(openD.length) return 'Most urgent across all agents — '+openD[0].agent+' ('+openD[0].sev+'): '+openD[0].title+'. Recommends: '+openD[0].rec;
+      var openT=state.tickets.filter(function(x){return x.slaState!=='closed';});
+      openT.sort(function(a,b){ return (a.dueMin==null?9e9:a.dueMin)-(b.dueMin==null?9e9:b.dueMin); });
+      if(openT.length) return 'Most urgent across all agents — '+openT[0].src+': "'+openT[0].title+'" — '+openT[0].slaState+' ('+openT[0].sla+').';
+      return 'No open items anywhere right now — all 16 agents report steady state.';
+    }
+    var fieldMap={escalat:'escalates',action:'actions',kpi:'kpis',monitor:'monitors',boundary:'boundary',reason:'reasons'};
+    for(var k in fieldMap){
+      if(new RegExp(k).test(q)){
+        var field=fieldMap[k];
+        return AGENTS.map(function(a){
+          var det=AGENT_DETAIL[a.id]; if(!det) return null;
+          var v=det[field]; var first=Array.isArray(v)? v[0] : v;
+          return a.id+': '+first;
+        }).filter(Boolean).join(' · ');
+      }
+    }
+    return 'Across all 16 agents (A0–A12, S1–S3): each has its own mission, monitors, actions, escalation triggers and KPIs. Ask a status question for the most urgent item system-wide, or pick one agent below for its full detail.';
+  }
+  function askModal(scopeId){
     closeDrawer();
-    var agents=VIEW_AGENTS[state.view]||['A0'];
-    var id=agents[0];
-    var a=AGENTS.filter(function(x){return x.id===id;})[0];
+    var id=scopeId||'ALL';
+    var a=id==='ALL'? null : AGENTS.filter(function(x){return x.id===id;})[0];
     var askChips=['status','actions','escalation','kpis','monitors','boundary'];
-    var html='<div class="mh"><h3>Ask AI — '+esc(a?a.name:id)+' ('+esc(id)+')</h3></div>'+
+    var options='<option value="ALL"'+(id==='ALL'?' selected':'')+'>All agents</option>'+AGENTS.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===id?' selected':'')+'>'+esc(x.id)+' · '+esc(x.name)+'</option>';}).join('');
+    var html='<div class="mh"><h3>Ask AI'+(a?(' — '+esc(a.name)+' ('+esc(id)+')'):' — All agents')+'</h3></div>'+
       '<div class="mb">'+
+        '<label class="asklabel" for="askScope">Ask about</label>'+
+        '<select id="askScope" class="txtinput mb-3">'+options+'</select>'+
         '<div class="od-cluster mb-3">'+askChips.map(function(k){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+k+'">'+k.charAt(0).toUpperCase()+k.slice(1)+'</button>';}).join('')+'</div>'+
         '<label class="asklabel" for="askInput-'+esc(id)+'">Ask a question</label>'+
         '<div class="od-row"><input type="text" id="askInput-'+esc(id)+'" class="txtinput od-fill" placeholder="e.g. what is your status?" aria-describedby="askHint-'+esc(id)+'">'+
         '<button class="btn primary sm" data-act="ask-agent" data-id="'+esc(id)+'">Ask</button></div>'+
         '<p class="muted fs-sm mt-3" id="askAnswer-'+esc(id)+'" hidden></p>'+
-        '<p class="muted fs-xs mt-2" id="askHint-'+esc(id)+'">Simulated response grounded in this agent’s live signals — not a live model call.</p>'+
+        '<p class="muted fs-xs mt-2" id="askHint-'+esc(id)+'">Simulated response grounded in live signals — not a live model call. Press / anywhere to reopen this.</p>'+
       '</div>'+
       '<div class="mf"><button class="btn ghost" data-close="modal">Close</button></div>';
     openModal(html);
@@ -2897,7 +2925,10 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
         var qv=el.getAttribute('data-q');
         if(qv==null){ var inp=document.getElementById('askInput-'+aid); qv=inp? inp.value : ''; }
         var ansEl=document.getElementById('askAnswer-'+aid);
-        if(ansEl){ ansEl.textContent=askAgent(aid,qv); ansEl.hidden=false; }
+        if(ansEl){
+          ansEl.textContent='Thinking…'; ansEl.hidden=false;
+          setTimeout(function(){ ansEl.textContent=(aid==='ALL'? askAgentAll(qv) : askAgent(aid,qv)); },500);
+        }
         return;
       }
     }
@@ -2982,7 +3013,23 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     if(!t || !t.id || t.id.indexOf('askInput-')!==0) return;
     var aid=t.id.slice('askInput-'.length);
     var ansEl=document.getElementById('askAnswer-'+aid);
-    if(ansEl){ ansEl.textContent=askAgent(aid,t.value); ansEl.hidden=false; }
+    if(ansEl){
+      var q=t.value;
+      ansEl.textContent='Thinking…'; ansEl.hidden=false;
+      setTimeout(function(){ ansEl.textContent=(aid==='ALL'? askAgentAll(q) : askAgent(aid,q)); },500);
+    }
+  });
+  document.addEventListener('change',function(ev){
+    var sel=ev.target.closest('#askScope');
+    if(sel) askModal(sel.value);
+  });
+  document.addEventListener('keydown',function(e){
+    if(e.key!=='/') return;
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    var tag=(e.target&&e.target.tagName)||'';
+    if(tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT'||(e.target&&e.target.isContentEditable)) return;
+    e.preventDefault();
+    askModal();
   });
 
   document.addEventListener('input',function(ev){
