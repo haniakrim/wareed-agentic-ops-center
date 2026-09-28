@@ -1664,6 +1664,18 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     askScope:'ALL',
     askHistory:[]
   };
+  (function(){
+    try{
+      var sc=localStorage.getItem('wareed.askScope'); if(sc) state.askScope=sc;
+      var hs=localStorage.getItem('wareed.askHistory'); if(hs){ var arr=JSON.parse(hs); if(Array.isArray(arr)) state.askHistory=arr; }
+    }catch(e){}
+  })();
+  function saveAskState(){
+    try{
+      localStorage.setItem('wareed.askScope', state.askScope);
+      localStorage.setItem('wareed.askHistory', JSON.stringify(state.askHistory));
+    }catch(e){}
+  }
 
   /* =========================================================
      Helpers
@@ -2805,10 +2817,11 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     closeDrawer();
     var id=scopeId!=null? scopeId : (state.askScope||'ALL');
     state.askScope=id;
+    saveAskState();
     var a=id==='ALL'? null : AGENTS.filter(function(x){return x.id===id;})[0];
     var askChips=['status','actions','escalation','kpis','monitors','boundary'];
     var options='<option value="ALL"'+(id==='ALL'?' selected':'')+'>All agents</option>'+AGENTS.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===id?' selected':'')+'>'+esc(x.id)+' · '+esc(x.name)+'</option>';}).join('');
-    var histHtml=state.askHistory.length? ('<label class="asklabel">Recent questions</label><div class="od-cluster mb-3">'+state.askHistory.map(function(hq){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+esc(hq)+'">'+esc(hq.length>28?hq.slice(0,28)+'…':hq)+'</button>';}).join('')+'</div>') : '';
+    var histHtml=state.askHistory.length? ('<div class="od-row mb-1"><label class="asklabel">Recent questions</label><span class="grow"></span><button class="btn ghost xs" data-act="clear-ask-history">Clear</button></div><div class="od-cluster mb-3">'+state.askHistory.map(function(hq){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+esc(hq)+'">'+esc(hq.length>28?hq.slice(0,28)+'…':hq)+'</button>';}).join('')+'</div>') : '';
     var html='<div class="mh"><h3>Ask AI'+(a?(' — '+esc(a.name)+' ('+esc(id)+')'):' — All agents')+'</h3></div>'+
       '<div class="mb">'+
         '<label class="asklabel" for="askScope">Ask about</label>'+
@@ -2830,6 +2843,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     if(state.askHistory[0]===q) return;
     state.askHistory.unshift(q);
     if(state.askHistory.length>5) state.askHistory.length=5;
+    saveAskState();
   }
   function agentDrawer(id){
     closeModal();
@@ -2941,6 +2955,12 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
           ansEl.textContent='Thinking…'; ansEl.hidden=false;
           setTimeout(function(){ ansEl.textContent=(aid==='ALL'? askAgentAll(qv) : askAgent(aid,qv)); },500);
         }
+        return;
+      }
+      if(act==='clear-ask-history'){
+        state.askHistory=[];
+        saveAskState();
+        askModal(state.askScope);
         return;
       }
     }
@@ -3099,7 +3119,15 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
   if(VIEWS[start]) state.view=start;
   applyLangAttrs();
   render();
-  setTimeout(function(){ toast('Tip: press / anywhere to ask AI.',''); },900);
+  (function(){
+    var seen=false;
+    try{ seen=localStorage.getItem('wareed.aiTipSeen')==='1'; }catch(e){}
+    if(seen) return;
+    setTimeout(function(){
+      toast('Tip: press / anywhere to ask AI.','');
+      try{ localStorage.setItem('wareed.aiTipSeen','1'); }catch(e){}
+    },900);
+  })();
 })();
 </script>
 </body>
