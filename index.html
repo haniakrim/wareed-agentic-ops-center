@@ -1662,12 +1662,13 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     railCollapsed:false,
     visionThreshold:0.7,
     askScope:'ALL',
-    askHistory:[]
+    askHistory:{}
   };
   (function(){
     try{
       var sc=localStorage.getItem('wareed.askScope'); if(sc) state.askScope=sc;
-      var hs=localStorage.getItem('wareed.askHistory'); if(hs){ var arr=JSON.parse(hs); if(Array.isArray(arr)) state.askHistory=arr; }
+      var hs=localStorage.getItem('wareed.askHistory');
+      if(hs){ var obj=JSON.parse(hs); if(obj && typeof obj==='object' && !Array.isArray(obj)) state.askHistory=obj; }
     }catch(e){}
   })();
   function saveAskState(){
@@ -2821,7 +2822,8 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     var a=id==='ALL'? null : AGENTS.filter(function(x){return x.id===id;})[0];
     var askChips=['status','actions','escalation','kpis','monitors','boundary'];
     var options='<option value="ALL"'+(id==='ALL'?' selected':'')+'>All agents</option>'+AGENTS.map(function(x){return '<option value="'+esc(x.id)+'"'+(x.id===id?' selected':'')+'>'+esc(x.id)+' · '+esc(x.name)+'</option>';}).join('');
-    var histHtml=state.askHistory.length? ('<div class="od-row mb-1"><label class="asklabel">Recent questions</label><span class="grow"></span><button class="btn ghost xs" data-act="clear-ask-history">Clear</button></div><div class="od-cluster mb-3">'+state.askHistory.map(function(hq){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+esc(hq)+'">'+esc(hq.length>28?hq.slice(0,28)+'…':hq)+'</button>';}).join('')+'</div>') : '';
+    var hist=state.askHistory[id]||[];
+    var histHtml=hist.length? ('<div class="od-row mb-1"><label class="asklabel">Recent questions</label><span class="grow"></span><button class="btn ghost xs" data-act="clear-ask-history">Clear</button></div><div class="od-cluster mb-3">'+hist.map(function(hq){return '<button class="btn ghost xs" data-act="ask-agent" data-id="'+esc(id)+'" data-q="'+esc(hq)+'">'+esc(hq.length>28?hq.slice(0,28)+'…':hq)+'</button>';}).join('')+'</div>') : '';
     var html='<div class="mh"><h3>Ask AI'+(a?(' — '+esc(a.name)+' ('+esc(id)+')'):' — All agents')+'</h3></div>'+
       '<div class="mb">'+
         '<label class="asklabel" for="askScope">Ask about</label>'+
@@ -2834,15 +2836,16 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
         '<p class="muted fs-sm mt-3" id="askAnswer-'+esc(id)+'" hidden></p>'+
         '<p class="muted fs-xs mt-2" id="askHint-'+esc(id)+'">Simulated response grounded in live signals — not a live model call. Press / anywhere to reopen this.</p>'+
       '</div>'+
-      '<div class="mf"><button class="btn ghost" data-close="modal">Close</button></div>';
+      '<div class="mf"><button class="btn ghost xs" data-act="reset-prefs">Reset AI preferences</button><span class="grow"></span><button class="btn ghost" data-close="modal">Close</button></div>';
     openModal(html);
   }
-  function pushAskHistory(q){
+  function pushAskHistory(scopeId,q){
     q=(q||'').trim();
     if(!q) return;
-    if(state.askHistory[0]===q) return;
-    state.askHistory.unshift(q);
-    if(state.askHistory.length>5) state.askHistory.length=5;
+    var h=state.askHistory[scopeId]||(state.askHistory[scopeId]=[]);
+    if(h[0]===q) return;
+    h.unshift(q);
+    if(h.length>5) h.length=5;
     saveAskState();
   }
   function agentDrawer(id){
@@ -2949,7 +2952,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
       if(act==='ask-agent'){
         var aid=el.getAttribute('data-id');
         var qv=el.getAttribute('data-q');
-        if(qv==null){ var inp=document.getElementById('askInput-'+aid); qv=inp? inp.value : ''; pushAskHistory(qv); }
+        if(qv==null){ var inp=document.getElementById('askInput-'+aid); qv=inp? inp.value : ''; pushAskHistory(aid,qv); }
         var ansEl=document.getElementById('askAnswer-'+aid);
         if(ansEl){
           ansEl.textContent='Thinking…'; ansEl.hidden=false;
@@ -2958,9 +2961,21 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
         return;
       }
       if(act==='clear-ask-history'){
-        state.askHistory=[];
+        state.askHistory[state.askScope]=[];
         saveAskState();
         askModal(state.askScope);
+        toast('Recent questions cleared.','ok');
+        return;
+      }
+      if(act==='reset-prefs'){
+        try{
+          localStorage.removeItem('wareed.askScope');
+          localStorage.removeItem('wareed.askHistory');
+          localStorage.removeItem('wareed.aiTipSeen');
+          localStorage.removeItem('wareed.lang');
+        }catch(e){}
+        toast('Preferences reset. Reloading…','ok');
+        setTimeout(function(){ location.reload(); },700);
         return;
       }
     }
@@ -3047,7 +3062,7 @@ html[lang="ar"] .navgroup, html[lang="ar"] .brand .bsub, html[lang="ar"] .tbl th
     var ansEl=document.getElementById('askAnswer-'+aid);
     if(ansEl){
       var q=t.value;
-      pushAskHistory(q);
+      pushAskHistory(aid,q);
       ansEl.textContent='Thinking…'; ansEl.hidden=false;
       setTimeout(function(){ ansEl.textContent=(aid==='ALL'? askAgentAll(q) : askAgent(aid,q)); },500);
     }
